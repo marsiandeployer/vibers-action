@@ -39,8 +39,9 @@ runs:
         # --- Diff stat (zone of changes) ---
         DIFF_STAT=$(git diff --stat HEAD~1 2>/dev/null | tail -1 || true)
 
-        # --- Commit message ---
+        # --- Commit message (subject + body) ---
         COMMIT_MSG=$(git log -1 --pretty=format:"%s" 2>/dev/null || echo "")
+        COMMIT_BODY=$(git log -1 --pretty=format:"%b" 2>/dev/null || echo "")
 
         # --- Extract URLs from README ---
         URLS=""
@@ -102,6 +103,10 @@ runs:
         echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
+        echo "commit_body<<EOF" >> $GITHUB_OUTPUT
+        echo "$COMMIT_BODY" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
         echo "urls<<EOF" >> $GITHUB_OUTPUT
         echo "$URLS" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
@@ -133,12 +138,13 @@ runs:
             --arg contact "${{ inputs.telegram_contact }}" \
             --arg files "${{ steps.context.outputs.files }}" \
             --arg commit_msg "${{ steps.context.outputs.commit_msg }}" \
+            --arg commit_body "${{ steps.context.outputs.commit_body }}" \
             --arg diff_stat "${{ steps.context.outputs.diff_stat }}" \
             --arg urls "${{ steps.context.outputs.urls }}" \
             --arg creds "${{ steps.context.outputs.creds }}" \
             --arg deploy_url "${{ steps.context.outputs.deploy_url }}" \
             --arg stack "${{ steps.context.outputs.stack }}" \
-            '{repo: $repo, branch: $branch, sha: $sha, author: $author, spec_url: $spec, scope: $scope, contact: $contact, changed_files: $files, commit_msg: $commit_msg, diff_stat: $diff_stat, urls: $urls, creds: $creds, deploy_url: $deploy_url, stack: $stack}')" \
+            '{repo: $repo, branch: $branch, sha: $sha, author: $author, spec_url: $spec, scope: $scope, contact: $contact, changed_files: $files, commit_msg: $commit_msg, commit_body: $commit_body, diff_stat: $diff_stat, urls: $urls, creds: $creds, deploy_url: $deploy_url, stack: $stack}')" \
           2>/dev/null || echo -e '{"error":"network"}\n000')
 
         HTTP_CODE=$(echo "$RESPONSE" | tail -1)
