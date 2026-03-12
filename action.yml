@@ -126,25 +126,27 @@ runs:
     - name: Notify Vibers
       shell: bash
       run: |
+        PAYLOAD=$(jq -n \
+          --arg repo "$V_REPO" \
+          --arg branch "$V_BRANCH" \
+          --arg sha "$V_SHA" \
+          --arg author "$V_AUTHOR" \
+          --arg spec_url "$V_SPEC" \
+          --arg scope "$V_SCOPE" \
+          --arg contact "$V_CONTACT" \
+          --arg changed_files "$V_FILES" \
+          --arg commit_msg "$V_COMMIT_MSG" \
+          --arg commit_body "$V_COMMIT_BODY" \
+          --arg diff_stat "$V_DIFF_STAT" \
+          --arg urls "$V_URLS" \
+          --arg creds "$V_CREDS" \
+          --arg deploy_url "$V_DEPLOY_URL" \
+          --arg stack "$V_STACK" \
+          '$ARGS.named')
+
         RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://vibers.onout.org/review" \
           -H "Content-Type: application/json" \
-          -d "$(jq -n \
-            --arg repo "${{ github.repository }}" \
-            --arg branch "${{ github.ref_name }}" \
-            --arg sha "${{ github.sha }}" \
-            --arg author "${{ github.actor }}" \
-            --arg spec "${{ inputs.spec_url }}" \
-            --arg scope "${{ inputs.review_scope }}" \
-            --arg contact "${{ inputs.telegram_contact }}" \
-            --arg files "${{ steps.context.outputs.files }}" \
-            --arg commit_msg "${{ steps.context.outputs.commit_msg }}" \
-            --arg commit_body "${{ steps.context.outputs.commit_body }}" \
-            --arg diff_stat "${{ steps.context.outputs.diff_stat }}" \
-            --arg urls "${{ steps.context.outputs.urls }}" \
-            --arg creds "${{ steps.context.outputs.creds }}" \
-            --arg deploy_url "${{ steps.context.outputs.deploy_url }}" \
-            --arg stack "${{ steps.context.outputs.stack }}" \
-            '{repo: $repo, branch: $branch, sha: $sha, author: $author, spec_url: $spec, scope: $scope, contact: $contact, changed_files: $files, commit_msg: $commit_msg, commit_body: $commit_body, diff_stat: $diff_stat, urls: $urls, creds: $creds, deploy_url: $deploy_url, stack: $stack}')" \
+          -d "$PAYLOAD" \
           2>/dev/null || echo -e '{"error":"network"}\n000')
 
         HTTP_CODE=$(echo "$RESPONSE" | tail -1)
@@ -158,18 +160,22 @@ runs:
 
         # Summary
         echo "## Vibers Review Submitted" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Repo:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Commit:** \`${{ github.sha }}\` — ${{ steps.context.outputs.commit_msg }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Author:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Stack:** ${{ steps.context.outputs.stack }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Stat:** ${{ steps.context.outputs.diff_stat }}" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Changed files (${{ steps.context.outputs.count }}):" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        echo "${{ steps.context.outputs.files }}" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "---" >> $GITHUB_STEP_SUMMARY
-        echo "**marsiandeployer** will review and submit a PR with fixes." >> $GITHUB_STEP_SUMMARY
+        echo "**Repo:** $V_REPO | **Branch:** $V_BRANCH" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** \`${V_SHA:0:8}\` — $V_COMMIT_MSG" >> $GITHUB_STEP_SUMMARY
+        echo "**Stack:** $V_STACK | **Stat:** $V_DIFF_STAT" >> $GITHUB_STEP_SUMMARY
+      env:
+        V_REPO: ${{ github.repository }}
+        V_BRANCH: ${{ github.ref_name }}
+        V_SHA: ${{ github.sha }}
+        V_AUTHOR: ${{ github.actor }}
+        V_SPEC: ${{ inputs.spec_url }}
+        V_SCOPE: ${{ inputs.review_scope }}
+        V_CONTACT: ${{ inputs.telegram_contact }}
+        V_FILES: ${{ steps.context.outputs.files }}
+        V_COMMIT_MSG: ${{ steps.context.outputs.commit_msg }}
+        V_COMMIT_BODY: ${{ steps.context.outputs.commit_body }}
+        V_DIFF_STAT: ${{ steps.context.outputs.diff_stat }}
+        V_URLS: ${{ steps.context.outputs.urls }}
+        V_CREDS: ${{ steps.context.outputs.creds }}
+        V_DEPLOY_URL: ${{ steps.context.outputs.deploy_url }}
+        V_STACK: ${{ steps.context.outputs.stack }}
