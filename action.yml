@@ -1,0 +1,96 @@
+name: 'Vibers Code Review'
+description: 'Human-in-the-loop code review for vibecoded projects. Reviews commits against your spec, fixes issues, sends PRs.'
+author: 'marsiandeployer'
+
+branding:
+  icon: 'check-circle'
+  color: 'purple'
+
+inputs:
+  spec_url:
+    description: 'URL to your spec document (Google Doc, Notion, etc.)'
+    required: false
+    default: ''
+  review_scope:
+    description: 'Review scope: full, security, spec-compliance'
+    required: false
+    default: 'full'
+  telegram_contact:
+    description: 'Your Telegram handle for review delivery'
+    required: false
+    default: ''
+  vibers_api_key:
+    description: 'Vibers API key (get at https://vibers.onout.org)'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Get changed files
+      id: changed
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          FILES=$(gh pr diff ${{ github.event.pull_request.number }} --name-only 2>/dev/null || git diff --name-only HEAD~1)
+        else
+          FILES=$(git diff --name-only HEAD~1 2>/dev/null || echo "")
+        fi
+        echo "files<<EOF" >> $GITHUB_OUTPUT
+        echo "$FILES" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        FILE_COUNT=$(echo "$FILES" | grep -c '[^[:space:]]' || echo "0")
+        echo "count=$FILE_COUNT" >> $GITHUB_OUTPUT
+      env:
+        GH_TOKEN: ${{ github.token }}
+
+    - name: Collect review context
+      id: context
+      shell: bash
+      run: |
+        echo "## Vibers Review Request" > /tmp/vibers_review.md
+        echo "" >> /tmp/vibers_review.md
+        echo "**Repo:** ${{ github.repository }}" >> /tmp/vibers_review.md
+        echo "**Branch:** ${{ github.ref_name }}" >> /tmp/vibers_review.md
+        echo "**Commit:** ${{ github.sha }}" >> /tmp/vibers_review.md
+        echo "**Author:** ${{ github.actor }}" >> /tmp/vibers_review.md
+        echo "**Spec:** ${{ inputs.spec_url }}" >> /tmp/vibers_review.md
+        echo "**Scope:** ${{ inputs.review_scope }}" >> /tmp/vibers_review.md
+        echo "**Contact:** ${{ inputs.telegram_contact }}" >> /tmp/vibers_review.md
+        echo "" >> /tmp/vibers_review.md
+        echo "### Changed files (${{ steps.changed.outputs.count }}):" >> /tmp/vibers_review.md
+        echo '```' >> /tmp/vibers_review.md
+        echo "${{ steps.changed.outputs.files }}" >> /tmp/vibers_review.md
+        echo '```' >> /tmp/vibers_review.md
+
+    - name: Submit review request
+      shell: bash
+      run: |
+        REVIEW_DATA=$(cat /tmp/vibers_review.md)
+
+        # If API key provided, submit via API
+        if [ -n "${{ inputs.vibers_api_key }}" ]; then
+          curl -s -X POST "https://vibers.onout.org/api/review" \
+            -H "Authorization: Bearer ${{ inputs.vibers_api_key }}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg repo "${{ github.repository }}" \
+              --arg branch "${{ github.ref_name }}" \
+              --arg sha "${{ github.sha }}" \
+              --arg spec "${{ inputs.spec_url }}" \
+              --arg scope "${{ inputs.review_scope }}" \
+              --arg contact "${{ inputs.telegram_contact }}" \
+              --arg files "${{ steps.changed.outputs.files }}" \
+              '{repo: $repo, branch: $branch, sha: $sha, spec_url: $spec, scope: $scope, contact: $contact, changed_files: $files}')" \
+            || echo "::warning::Could not reach Vibers API. Review request saved locally."
+        fi
+
+        # Always output summary
+        echo "## 🔍 Vibers Review Submitted" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "$REVIEW_DATA" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "---" >> $GITHUB_STEP_SUMMARY
+        echo "📬 **marsiandeployer** will review this commit and submit a PR with fixes." >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "🚀 [Get started with Vibers](https://vibers.onout.org) | 💬 [Contact on Telegram](https://t.me/onoutnoxon)" >> $GITHUB_STEP_SUMMARY
