@@ -33,10 +33,11 @@ runs:
         else
           FILES=$(git diff --name-only HEAD~1 2>/dev/null || echo "")
         fi
-        FILE_COUNT=$(echo "$FILES" | grep -c '[^[:space:]]' || echo "0")
+        FILE_COUNT=$(echo "$FILES" | grep -c '[^[:space:]]' || true)
+        [ -z "$FILE_COUNT" ] && FILE_COUNT=0
 
         # --- Diff stat (zone of changes) ---
-        DIFF_STAT=$(git diff --stat HEAD~1 2>/dev/null | tail -1 || echo "")
+        DIFF_STAT=$(git diff --stat HEAD~1 2>/dev/null | tail -1 || true)
 
         # --- Commit message ---
         COMMIT_MSG=$(git log -1 --pretty=format:"%s" 2>/dev/null || echo "")
@@ -46,7 +47,7 @@ runs:
         for f in README.md README.rst README readme.md; do
           if [ -f "$f" ]; then
             # Extract http(s) URLs, demo/staging/production/preview keywords nearby
-            URLS=$(grep -oiE 'https?://[^ )"]+' "$f" 2>/dev/null | grep -viE 'shields\.io|github\.com/(actions|features|pricing)|img\.shields' | head -10 | sort -u)
+            URLS=$(grep -oiE 'https?://[^ )"]+' "$f" 2>/dev/null | grep -viE 'shields\.io|github\.com/(actions|features|pricing)|img\.shields' | head -10 | sort -u || true)
             break
           fi
         done
@@ -56,7 +57,7 @@ runs:
         for f in README.md README.rst readme.md .env.example .env.sample; do
           if [ -f "$f" ]; then
             # Look for login/password/email/test patterns
-            FOUND=$(grep -inE '(test.*user|demo.*account|login|password|email.*test|credentials|default.*admin|guest|sample.*auth)' "$f" 2>/dev/null | head -5)
+            FOUND=$(grep -inE '(test.*user|demo.*account|login|password|email.*test|credentials|default.*admin|guest|sample.*auth)' "$f" 2>/dev/null | head -5 || true)
             if [ -n "$FOUND" ]; then
               CREDS="${CREDS}${f}:\n${FOUND}\n"
             fi
@@ -78,14 +79,14 @@ runs:
 
         # --- Tech stack detection ---
         STACK=""
-        [ -f "package.json" ] && STACK="${STACK}node "
-        [ -f "requirements.txt" ] || [ -f "pyproject.toml" ] && STACK="${STACK}python "
-        [ -f "Gemfile" ] && STACK="${STACK}ruby "
-        [ -f "go.mod" ] && STACK="${STACK}go "
-        [ -f "Cargo.toml" ] && STACK="${STACK}rust "
-        [ -f "docker-compose.yml" ] || [ -f "Dockerfile" ] && STACK="${STACK}docker "
-        [ -d ".github/workflows" ] && STACK="${STACK}ci "
-        STACK=$(echo "$STACK" | xargs)
+        [ -f "package.json" ] && STACK="${STACK}node " || true
+        { [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; } && STACK="${STACK}python " || true
+        [ -f "Gemfile" ] && STACK="${STACK}ruby " || true
+        [ -f "go.mod" ] && STACK="${STACK}go " || true
+        [ -f "Cargo.toml" ] && STACK="${STACK}rust " || true
+        { [ -f "docker-compose.yml" ] || [ -f "Dockerfile" ]; } && STACK="${STACK}docker " || true
+        [ -d ".github/workflows" ] && STACK="${STACK}ci " || true
+        STACK=$(echo "$STACK" | xargs || echo "")
 
         # --- Output all ---
         echo "files<<EOF" >> $GITHUB_OUTPUT
