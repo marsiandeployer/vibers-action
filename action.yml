@@ -23,20 +23,97 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Get changed files
-      id: changed
+    - name: Collect review context
+      id: context
       shell: bash
       run: |
+        # --- Changed files ---
         if [ "${{ github.event_name }}" = "pull_request" ]; then
           FILES=$(gh pr diff ${{ github.event.pull_request.number }} --name-only 2>/dev/null || git diff --name-only HEAD~1)
         else
           FILES=$(git diff --name-only HEAD~1 2>/dev/null || echo "")
         fi
+        FILE_COUNT=$(echo "$FILES" | grep -c '[^[:space:]]' || echo "0")
+
+        # --- Diff stat (zone of changes) ---
+        DIFF_STAT=$(git diff --stat HEAD~1 2>/dev/null | tail -1 || echo "")
+
+        # --- Commit message ---
+        COMMIT_MSG=$(git log -1 --pretty=format:"%s" 2>/dev/null || echo "")
+
+        # --- Extract URLs from README ---
+        URLS=""
+        for f in README.md README.rst README readme.md; do
+          if [ -f "$f" ]; then
+            # Extract http(s) URLs, demo/staging/production/preview keywords nearby
+            URLS=$(grep -oiE 'https?://[^ )"]+' "$f" 2>/dev/null | grep -viE 'shields\.io|github\.com/(actions|features|pricing)|img\.shields' | head -10 | sort -u)
+            break
+          fi
+        done
+
+        # --- Extract credentials/test accounts from README or .env.example ---
+        CREDS=""
+        for f in README.md README.rst readme.md .env.example .env.sample; do
+          if [ -f "$f" ]; then
+            # Look for login/password/email/test patterns
+            FOUND=$(grep -inE '(test.*user|demo.*account|login|password|email.*test|credentials|default.*admin|guest|sample.*auth)' "$f" 2>/dev/null | head -5)
+            if [ -n "$FOUND" ]; then
+              CREDS="${CREDS}${f}:\n${FOUND}\n"
+            fi
+          fi
+        done
+
+        # --- Check for deploy/preview URLs in package.json or config ---
+        DEPLOY_URL=""
+        if [ -f "package.json" ]; then
+          DEPLOY_URL=$(jq -r '.homepage // empty' package.json 2>/dev/null || echo "")
+        fi
+        # Vercel/Netlify project
+        if [ -f "vercel.json" ]; then
+          DEPLOY_URL="${DEPLOY_URL} (vercel project)"
+        fi
+        if [ -f "netlify.toml" ]; then
+          DEPLOY_URL="${DEPLOY_URL} (netlify project)"
+        fi
+
+        # --- Tech stack detection ---
+        STACK=""
+        [ -f "package.json" ] && STACK="${STACK}node "
+        [ -f "requirements.txt" ] || [ -f "pyproject.toml" ] && STACK="${STACK}python "
+        [ -f "Gemfile" ] && STACK="${STACK}ruby "
+        [ -f "go.mod" ] && STACK="${STACK}go "
+        [ -f "Cargo.toml" ] && STACK="${STACK}rust "
+        [ -f "docker-compose.yml" ] || [ -f "Dockerfile" ] && STACK="${STACK}docker "
+        [ -d ".github/workflows" ] && STACK="${STACK}ci "
+        STACK=$(echo "$STACK" | xargs)
+
+        # --- Output all ---
         echo "files<<EOF" >> $GITHUB_OUTPUT
         echo "$FILES" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
-        FILE_COUNT=$(echo "$FILES" | grep -c '[^[:space:]]' || echo "0")
         echo "count=$FILE_COUNT" >> $GITHUB_OUTPUT
+
+        echo "diff_stat<<EOF" >> $GITHUB_OUTPUT
+        echo "$DIFF_STAT" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        echo "commit_msg<<EOF" >> $GITHUB_OUTPUT
+        echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        echo "urls<<EOF" >> $GITHUB_OUTPUT
+        echo "$URLS" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        echo "creds<<EOF" >> $GITHUB_OUTPUT
+        echo -e "$CREDS" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        echo "deploy_url<<EOF" >> $GITHUB_OUTPUT
+        echo "$DEPLOY_URL" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        echo "stack=$STACK" >> $GITHUB_OUTPUT
       env:
         GH_TOKEN: ${{ github.token }}
 
@@ -53,8 +130,14 @@ runs:
             --arg spec "${{ inputs.spec_url }}" \
             --arg scope "${{ inputs.review_scope }}" \
             --arg contact "${{ inputs.telegram_contact }}" \
-            --arg files "${{ steps.changed.outputs.files }}" \
-            '{repo: $repo, branch: $branch, sha: $sha, author: $author, spec_url: $spec, scope: $scope, contact: $contact, changed_files: $files}')" \
+            --arg files "${{ steps.context.outputs.files }}" \
+            --arg commit_msg "${{ steps.context.outputs.commit_msg }}" \
+            --arg diff_stat "${{ steps.context.outputs.diff_stat }}" \
+            --arg urls "${{ steps.context.outputs.urls }}" \
+            --arg creds "${{ steps.context.outputs.creds }}" \
+            --arg deploy_url "${{ steps.context.outputs.deploy_url }}" \
+            --arg stack "${{ steps.context.outputs.stack }}" \
+            '{repo: $repo, branch: $branch, sha: $sha, author: $author, spec_url: $spec, scope: $scope, contact: $contact, changed_files: $files, commit_msg: $commit_msg, diff_stat: $diff_stat, urls: $urls, creds: $creds, deploy_url: $deploy_url, stack: $stack}')" \
           2>/dev/null || echo -e '{"error":"network"}\n000')
 
         HTTP_CODE=$(echo "$RESPONSE" | tail -1)
@@ -66,23 +149,20 @@ runs:
           echo "::warning::Vibers notification failed (HTTP $HTTP_CODE): $BODY"
         fi
 
+        # Summary
         echo "## Vibers Review Submitted" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Repo:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
         echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** \`${{ github.sha }}\` — ${{ steps.context.outputs.commit_msg }}" >> $GITHUB_STEP_SUMMARY
         echo "**Author:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Scope:** ${{ inputs.review_scope }}" >> $GITHUB_STEP_SUMMARY
-        if [ -n "${{ inputs.spec_url }}" ]; then
-          echo "**Spec:** ${{ inputs.spec_url }}" >> $GITHUB_STEP_SUMMARY
-        fi
+        echo "**Stack:** ${{ steps.context.outputs.stack }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Stat:** ${{ steps.context.outputs.diff_stat }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Changed files (${{ steps.changed.outputs.count }}):" >> $GITHUB_STEP_SUMMARY
+        echo "### Changed files (${{ steps.context.outputs.count }}):" >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
-        echo "${{ steps.changed.outputs.files }}" >> $GITHUB_STEP_SUMMARY
+        echo "${{ steps.context.outputs.files }}" >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "---" >> $GITHUB_STEP_SUMMARY
         echo "**marsiandeployer** will review and submit a PR with fixes." >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "[Vibers](https://vibers.onout.org) | [Telegram](https://t.me/onoutnoxon)" >> $GITHUB_STEP_SUMMARY
