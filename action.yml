@@ -6,6 +6,7 @@ branding:
   icon: 'check-circle'
   color: 'purple'
 
+# ⚠️ First: add Vibers reviewer (marsiandeployer) as collaborator → repo Settings → Collaborators
 inputs:
   spec_url:
     description: 'URL to your spec document (Google Doc, Notion, etc.)'
