@@ -28,21 +28,34 @@ runs:
       id: context
       shell: bash
       run: |
+        # --- Determine commit range ---
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+        else
+          BASE_SHA="${{ github.event.before }}"
+          HEAD_SHA="${{ github.sha }}"
+          # Fallback: if before is all zeros (first push to branch), use HEAD~1
+          if [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            BASE_SHA="HEAD~1"
+          fi
+        fi
+
         # --- Changed files ---
         if [ "${{ github.event_name }}" = "pull_request" ]; then
-          FILES=$(gh pr diff ${{ github.event.pull_request.number }} --name-only 2>/dev/null || git diff --name-only HEAD~1)
+          FILES=$(gh pr diff ${{ github.event.pull_request.number }} --name-only 2>/dev/null || git diff --name-only "$BASE_SHA" "$HEAD_SHA")
         else
-          FILES=$(git diff --name-only HEAD~1 2>/dev/null || echo "")
+          FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || echo "")
         fi
         FILE_COUNT=$(echo "$FILES" | grep -c '[^[:space:]]' || true)
         [ -z "$FILE_COUNT" ] && FILE_COUNT=0
 
-        # --- Diff stat (zone of changes) ---
-        DIFF_STAT=$(git diff --stat HEAD~1 2>/dev/null | tail -1 || true)
+        # --- Diff stat (full pushed range) ---
+        DIFF_STAT=$(git diff --stat "$BASE_SHA" "$HEAD_SHA" 2>/dev/null | tail -1 || true)
 
-        # --- Commit message (subject + body) ---
-        COMMIT_MSG=$(git log -1 --pretty=format:"%s" 2>/dev/null || echo "")
-        COMMIT_BODY=$(git log -1 --pretty=format:"%b" 2>/dev/null || echo "")
+        # --- Commit messages for full range ---
+        COMMIT_MSG=$(git log --pretty=format:"%s" "$BASE_SHA..$HEAD_SHA" 2>/dev/null | head -5 | paste -sd ' | ' || echo "")
+        COMMIT_BODY=$(git log --pretty=format:"%b" "$BASE_SHA..$HEAD_SHA" 2>/dev/null || echo "")
 
         # --- Extract URLs from README ---
         URLS=""
