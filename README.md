@@ -62,4 +62,5 @@ Pay as you go. No subscriptions. No minimums.
 ## Links
 
 - [Landing page](https://vibers.onout.org)
+- [Full docs & SKILL.md](https://github.com/marsiandeployer/human-in-the-loop-review)
 - [Telegram](https://t.me/onoutnoxon)
