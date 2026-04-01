@@ -167,16 +167,25 @@ runs:
         BODY=$(echo "$RESPONSE" | head -1)
 
         if [ "$HTTP_CODE" = "200" ]; then
-          echo "Vibers notified successfully"
+          QUEUE_POS=$(echo "$BODY" | jq -r '.queue_position // empty' 2>/dev/null || echo "")
+          if [ -n "$QUEUE_POS" ]; then
+            echo "✅ Review accepted. You are #${QUEUE_POS} in today's queue."
+          else
+            echo "✅ Vibers notified successfully"
+          fi
         else
           echo "::warning::Vibers notification failed (HTTP $HTTP_CODE): $BODY"
         fi
 
         # Summary
-        echo "## Vibers Review Submitted" >> $GITHUB_STEP_SUMMARY
+        echo "## ✅ Vibers Review Submitted" >> $GITHUB_STEP_SUMMARY
         echo "**Repo:** $V_REPO | **Branch:** $V_BRANCH" >> $GITHUB_STEP_SUMMARY
         echo "**Commit:** \`${V_SHA:0:8}\` — $V_COMMIT_MSG" >> $GITHUB_STEP_SUMMARY
         echo "**Stack:** $V_STACK | **Stat:** $V_DIFF_STAT" >> $GITHUB_STEP_SUMMARY
+        if [ -n "$QUEUE_POS" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔢 **You are #${QUEUE_POS} in today's review queue.** PR with fixes arrives within 24h." >> $GITHUB_STEP_SUMMARY
+        fi
       env:
         V_REPO: ${{ github.repository }}
         V_BRANCH: ${{ github.ref_name }}
