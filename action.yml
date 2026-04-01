@@ -24,8 +24,26 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Check if review is needed
+      id: gate
+      shell: bash
+      run: |
+        # Only trigger review if commit message contains "How to test"
+        COMMIT_BODY=$(git log -1 --pretty=format:"%b" 2>/dev/null || echo "")
+        COMMIT_SUBJ=$(git log -1 --pretty=format:"%s" 2>/dev/null || echo "")
+        FULL_MSG="${COMMIT_SUBJ}
+${COMMIT_BODY}"
+        if echo "$FULL_MSG" | grep -qiE 'how to test'; then
+          echo "skip=false" >> $GITHUB_OUTPUT
+          echo "✅ 'How to test' found — triggering review"
+        else
+          echo "skip=true" >> $GITHUB_OUTPUT
+          echo "⏭️ No 'How to test' in commit message — skipping review"
+        fi
+
     - name: Collect review context
       id: context
+      if: steps.gate.outputs.skip == 'false'
       shell: bash
       run: |
         # --- Determine commit range ---
@@ -138,6 +156,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
 
     - name: Notify Vibers
+      if: steps.gate.outputs.skip == 'false'
       shell: bash
       run: |
         PAYLOAD=$(jq -n \
