@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
-      - uses: marsiandeployer/vibers-action@v1
+      - uses: marsiandeployer/vibers-action@v1.1
         with:
           spec_url: 'https://docs.google.com/document/d/YOUR_SPEC_ID/edit'
           telegram_contact: '@your_telegram'
@@ -34,7 +34,7 @@ jobs:
 
 ### 3. Get reviews
 
-Every push triggers a review request. `marsiandeployer` reviews your commits against your spec and submits PRs with fixes.
+Every push with a **"How to test"** section in the commit message triggers a review request. `marsiandeployer` reviews your commits against your spec and submits PRs with fixes.
 
 ## Inputs
 
@@ -43,18 +43,22 @@ Every push triggers a review request. `marsiandeployer` reviews your commits aga
 | `spec_url` | No | `''` | URL to your spec (Google Doc, Notion, etc.) |
 | `review_scope` | No | `full` | `full`, `security`, or `spec-compliance` |
 | `telegram_contact` | No | `''` | Your Telegram for review delivery |
-| `vibers_api_key` | No | `''` | API key (get at vibers.onout.org) |
+| `vibers_api_key` | No | `''` | API key from vibers.onout.org (unlocks priority queue) |
+
+## When Reviews Trigger
+
+The action only fires when the commit message contains **"How to test"** — so routine pushes don't generate review requests. Include a "How to test" section in commits where you actually want a human to check the result.
 
 ## How It Works
 
-1. Action collects changed files and commit context
+1. Action collects changed files, commit context, and CI run URL
 2. Submits review request to Vibers
 3. `marsiandeployer` reviews code against your spec
 4. You get a PR with fixes (not just comments)
 
 ## Pricing
 
-- **$1/hour** (promo — in exchange for feedback)
+- **Free** (promo — GitHub ⭐ + feedback in return)
 - **$15/hour** (standard — priority turnaround)
 
 Pay as you go. No subscriptions. No minimums.
@@ -64,3 +68,13 @@ Pay as you go. No subscriptions. No minimums.
 - [Landing page](https://vibers.onout.org)
 - [Full docs & SKILL.md](https://github.com/marsiandeployer/human-in-the-loop-review)
 - [Telegram](https://t.me/onoutnoxon)
+
+## Changelog
+
+### v1.1
+- Added `vibers_api_key` input (priority queue)
+- CI run URL now included in review payload
+- Clarified "How to test" trigger requirement in docs
+
+### v1.0
+- Initial release
